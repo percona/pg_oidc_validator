@@ -115,6 +115,17 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
     res->authorized = std::ranges::includes(received_scopes, required_scopes);
   }
 
+  if (!res->authorized) {
+    const auto req = required_scopes | std::views::join_with(std::string(", "));
+    const std::string req_str(req.begin(), req.end());
+    const auto rec = received_scopes | std::views::join_with(std::string(", "));
+    const std::string rec_str(rec.begin(), rec.end());
+    elog(LOG, "Authorization failed because of scope mismatch. Required scopes: %s. Received scopes: %s",
+         req_str.c_str(), rec_str.c_str());
+  } else {
+    elog(DEBUG1, "OIDC validator authorizing user as '%s'", res->authn_id);
+  }
+
   return true;
 } catch (const std::exception& ex) {
   elog(WARNING, "OAuth validation failed with exception: %s", ex.what());
