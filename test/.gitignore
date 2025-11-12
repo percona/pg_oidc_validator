@@ -1,0 +1,5 @@
+/pgdata/
+/postgres.log
+/psql_output.log
+/selenium_output.log
+/vendor/bundle/

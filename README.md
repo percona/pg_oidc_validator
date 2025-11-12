@@ -34,7 +34,7 @@ pg_ctl -D <datadir> restart
 
 ### pg_oidc_validator.authn_field
 
-This GUC variable controls which field of the provided JWT token is used for identity mapping. 
+This GUC variable controls which field of the provided JWT token is used for identity mapping.
 By default this is the `sub` claim, as most providers allow the configuration of this claim to provide different user fields.
 
 In some cases however the `sub` claim is fixed to a randomly generated, application specific identifier which is non known before a user first connects to the application.
@@ -84,3 +84,7 @@ Google has some quirks which are currently not supported by the core PostgreSQL 
 
 ### Other providers
 Hopefully the information above will give you everything you need to configure _your_ OIDC provider correctly. If you do, [please let us know](https://forums.percona.com/c/postgresql/) how it went!
+
+## Testing
+
+The validator has a basic test suite, documented under [test/README.md](test/README.md).
