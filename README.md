@@ -88,3 +88,8 @@ Hopefully the information above will give you everything you need to configure _
 ## Testing
 
 The validator has a basic test suite, documented under [test/README.md](test/README.md).
+
+## Examples
+
+Examples can be found in the `examples` folder.
+Currently there's only a single [keycloak](examples/keycloak/README.md) example.

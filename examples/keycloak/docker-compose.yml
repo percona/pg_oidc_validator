@@ -1,0 +1,121 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    hostname: keycloak
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTPS_CERTIFICATE_FILE: /keys/crt.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /keys/key.pem
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: keycloak
+      KC_HOSTNAME_PORT: 8443
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "true"
+    volumes:
+      - ../../test/import:/opt/keycloak/data/import
+      - ./certs:/keys
+    ports:
+      - "127.0.0.1:8443:8443"
+    command: start-dev --import-realm
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8443"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+
+  postgres:
+    image: docker.io/postgres:18
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - ./certs/crt.pem:/usr/local/share/ca-certificates/keycloak-test.crt:ro
+    ports:
+      - "127.0.0.1:15432:5432"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    entrypoint:
+      - bash
+      - -c
+      - |
+        apt-get update -qq
+        apt-get install -y -qq ca-certificates curl libcurl4 wget
+        update-ca-certificates
+
+        wget -q https://github.com/Percona-Lab/pg_oidc_validator/releases/download/latest/pg-oidc-validator-pgdg18.deb
+        dpkg -i pg-oidc-validator-pgdg18.deb
+        rm pg-oidc-validator-pgdg18.deb
+
+        mkdir -p /etc/postgresql/conf.d /docker-entrypoint-initdb.d
+
+        cat > /etc/postgresql/conf.d/oauth.conf <<'EOF'
+        listen_addresses = '*'
+        oauth_validator_libraries = 'pg_oidc_validator'
+        pg_oidc_validator.authn_field = 'email'
+        EOF
+
+        cat > /tmp/pg_hba.conf <<'EOF'
+        host all all 0.0.0.0/0 oauth scope="email pgscope",issuer=https://keycloak:8443/realms/pgrealm,map=emap
+        local all all trust
+        host all all 127.0.0.1/32 trust
+        host all all ::1/128 trust
+        EOF
+
+        cat > /tmp/pg_ident.conf <<'EOF'
+        emap  testuser@example.com  testuser
+        EOF
+
+        cat > /docker-entrypoint-initdb.d/create-testuser.sh <<'EOF'
+        #!/bin/bash
+        set -e
+        psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+          CREATE ROLE testuser LOGIN SUPERUSER;
+        EOSQL
+        EOF
+
+        chmod +x /docker-entrypoint-initdb.d/create-testuser.sh
+
+        exec docker-entrypoint.sh postgres -c hba_file=/tmp/pg_hba.conf -c ident_file=/tmp/pg_ident.conf -c config_file=/etc/postgresql/conf.d/oauth.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  psql-client:
+    image: postgres:18
+    profiles:
+      - client
+    volumes:
+      - ./certs/crt.pem:/usr/local/share/ca-certificates/keycloak-test.crt:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint:
+      - bash
+      - -c
+      - |
+        apt-get update -qq
+        apt-get install -y -qq ca-certificates libpq-oauth
+        update-ca-certificates
+
+        echo ''
+        echo '========================================'
+        echo 'PostgreSQL OAuth Client'
+        echo '========================================'
+        echo ''
+        echo 'Connecting to PostgreSQL with OAuth...'
+        echo ''
+        echo 'When prompted, follow the device flow:'
+        echo '  1. Visit the URL shown in your browser'
+        echo '  2. Enter the device code'
+        echo '  3. Login with: testuser / asdfasdf'
+        echo ''
+        echo '========================================'
+        echo ''
+
+        exec psql 'host=postgres dbname=postgres user=testuser oauth_issuer=https://keycloak:8443/realms/pgrealm oauth_client_id=pgtest'
+    stdin_open: true
+    tty: true
