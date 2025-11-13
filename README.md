@@ -73,9 +73,6 @@ Connection example:
 ```
 psql 'host=127.0.0.1 dbname=name user=rolename oauth_issuer=https://127.0.0.1:8080/realms/master oauth_client_id=postgres'
 ```
-**NOTE**: OAuth requires HTTPS. You need to:
-1. Configure a valid SSL certificate in our test Keycloak server or
-2. Bypass the HTTPS requirement using the `PGOAUTHDEBUG` flag, which was [designed for tests like this](https://www.postgresql.org/docs/current/libpq-oauth.html#LIBPQ-OAUTH-DEBUGGING).
 
 ### Microsoft / Entra ID
 * `oauth_issuer` for postgres should be `https://login.microsoftonline.com/<tenant_id>/v2.0`
