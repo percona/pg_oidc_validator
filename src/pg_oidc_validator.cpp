@@ -3,6 +3,7 @@
 #include <ranges>
 #include <string>
 
+#include "http_cache.hpp"
 #include "http_client.hpp"
 #include "jwk.hpp"
 
@@ -10,6 +11,7 @@ extern "C" {
 #include "postgres.h"
 //
 #include "fmgr.h"
+#include "libpq/libpq-be.h"
 #include "libpq/oauth.h"
 #include "miscadmin.h"
 #include "utils/guc.h"
@@ -39,6 +41,12 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   // initialize return values to deny
   res->authn_id = nullptr;
   res->authorized = false;
+
+  try {
+    pg::pg_try([&]() { pg::http_cache::get_instance().attach(); });
+  } catch (const pg::postgres_exception& ex) {
+    elog(WARNING, "Failed to attach to HTTP cache: %s", ex.what());
+  }
 
   auto required_scopes_range = std::string(MyProcPort->hba->oauth_scope) | std::views::split(' ') |
                                std::views::transform([](auto r) { return std::string(r.data(), r.size()); });
