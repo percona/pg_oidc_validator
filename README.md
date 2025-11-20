@@ -8,7 +8,15 @@ This library should support most providers that implement OIDC and provide a val
 
 ## Getting started
 
-Binaries for Ubuntu 24.04 are available [here](https://github.com/Percona-Lab/pg_oidc_validator/releases/tag/latest).
+### Pre-built Packages
+
+**Debian/Ubuntu:**
+- Binaries for Ubuntu 24.04 are available [here](https://github.com/Percona-Lab/pg_oidc_validator/releases/tag/latest).
+
+**RHEL/Oracle Linux/Rocky Linux:**
+- RPM packages for OL8 and OL9 are available [here](https://github.com/Percona-Lab/pg_oidc_validator/releases/tag/latest).
+
+### Building from Source
 
 To build and install from sources, use `make USE_PGXS=1 install -j`.
 

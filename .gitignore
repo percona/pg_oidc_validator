@@ -1,2 +1,12 @@
 *.o
 *.so
+
+# RPM packaging artifacts
+/packaging/rpm/output/
+/packaging/rpm/pg_oidc_validator-test.rpm
+
+# Test artifacts
+/test/pgdata/
+/test/*.log
+/test/.bundle/
+/test-logs/

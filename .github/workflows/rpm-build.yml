@@ -1,0 +1,75 @@
+name: RPM Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-rpm:
+    name: Build RPM (${{ matrix.distro_name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: oraclelinux:8
+            distro_name: oraclelinux8
+          - distro: oraclelinux:9
+            distro_name: oraclelinux9
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Podman
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y podman
+
+    - name: Build RPM for ${{ matrix.distro_name }}
+      run: |
+        CONTAINER_RUNTIME=podman ./packaging/rpm/build-rpm.sh ${{ matrix.distro }}
+
+    - name: List built RPMs
+      run: |
+        echo "Built RPMs:"
+        ls -lh packaging/rpm/output/${{ matrix.distro_name }}/
+
+    - name: Upload RPM artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: pg-oidc-validator-${{ matrix.distro_name }}-rpm
+        path: packaging/rpm/output/${{ matrix.distro_name }}/*.rpm
+        retention-days: 30
+
+  publish-rpm:
+    name: Publish RPM Release
+    runs-on: ubuntu-latest
+    needs: [build-rpm]
+    if: "github.repository == 'Percona-Lab/pg_oidc_validator' && github.ref_name == 'main' && github.event_name == 'push'"
+
+    steps:
+    - name: Download all RPM artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: pg-oidc-validator-*-rpm
+        path: ./all-rpms
+        merge-multiple: true
+
+    - name: List all RPMs to publish
+      run: |
+        echo "All built RPMs:"
+        ls -lh all-rpms/
+
+    - name: Publish release
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: "all-rpms/*.rpm"
+        omitBody: true
+        allowUpdates: true
+        generateReleaseNotes: true
+        makeLatest: true
+        tag: "latest"
+        name: "HEAD"
+        replacesArtifacts: true

@@ -1,0 +1,96 @@
+ARG BASE_IMAGE=oraclelinux:8
+FROM ${BASE_IMAGE}
+
+RUN if [ -f /etc/oracle-release ]; then \
+        dnf install -y oracle-epel-release-el$(rpm -E %{rhel}); \
+    elif [ -f /etc/redhat-release ]; then \
+        dnf install -y epel-release; \
+    fi && \
+    dnf config-manager --set-enabled ol$(rpm -E %{rhel})_codeready_builder 2>/dev/null || \
+    dnf config-manager --set-enabled powertools 2>/dev/null || \
+    dnf config-manager --set-enabled crb 2>/dev/null || true
+
+RUN dnf install -y \
+    https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
+    dnf -qy module disable postgresql && \
+    dnf install -y postgresql18-server postgresql18 postgresql18-libs-oauth
+
+# Podman & related
+RUN dnf install -y  \
+    podman \
+    fuse-overlayfs \
+    slirp4netns \
+    shadow-utils
+
+# Build tools
+RUN dnf install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    git
+
+# Ruby & RVM dependencies
+RUN dnf install -y \
+    libyaml-devel \
+    gdbm-devel \
+    bzip2 \
+    which \
+    ca-certificates \
+    patch \
+    autoconf \
+    automake \
+    bison \
+    libffi-devel \
+    libtool \
+    readline-devel \
+    sqlite-devel \
+    zlib-devel \
+    ruby \
+    openssl-devel 
+
+# Test utilities
+RUN dnf install -y \
+    sudo \
+    tar \
+    gzip \
+    procps-ng \
+    net-tools \
+    chromium \
+    chromedriver
+
+# Packaging
+RUN dnf install -y \
+    redhat-rpm-config
+
+ARG RPM_FILE
+COPY ${RPM_FILE} /tmp/pg_oidc_validator.rpm
+RUN dnf install -y /tmp/pg_oidc_validator.rpm
+
+COPY test /test
+
+RUN useradd -m -u 1000 testuser && \
+    echo "testuser:100000:65536" > /etc/subuid && \
+    echo "testuser:100000:65536" > /etc/subgid && \
+    echo "testuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers && \
+    chown -R testuser:testuser /test
+RUN chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
+
+RUN cp /test/keys/crt.pem /etc/pki/ca-trust/source/anchors/keycloak-test.crt && \
+    update-ca-trust
+
+USER testuser
+WORKDIR /home/testuser
+
+SHELL ["/bin/bash", "-l", "-c"]
+RUN gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys \
+        409B6B1796C275462A1703113804BB82D39DC0E3 \
+        7D2BAF1CF37B13E2069D6956105BD0E739499BDB && \
+    curl -sSL https://get.rvm.io | bash -s stable
+RUN source ~/.rvm/scripts/rvm && rvm install 3.2.2 && rvm use 3.2.2 --default
+
+WORKDIR /test
+RUN source ~/.rvm/scripts/rvm && gem install bundler && \
+    bundle config set --local path 'vendor/bundle' && bundle install
+
+ENV PGBIN=/usr/pgsql-18/bin
+CMD ["/bin/bash", "-l", "-c", "cd /test && bundle exec rspec --format documentation; EXIT_CODE=$?; mkdir -p /test-logs && find /test -maxdepth 1 -name '*.log' -exec sudo cp {} /test-logs/ \\; || true; exit $EXIT_CODE"]

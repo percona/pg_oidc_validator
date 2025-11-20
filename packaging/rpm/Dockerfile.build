@@ -1,0 +1,50 @@
+ARG BASE_IMAGE=oraclelinux:8
+FROM ${BASE_IMAGE}
+
+RUN if [ -f /etc/oracle-release ]; then \
+        dnf install -y oracle-epel-release-el$(rpm -E %{rhel}); \
+    elif [ -f /etc/redhat-release ]; then \
+        dnf install -y epel-release; \
+    fi && \
+    dnf config-manager --set-enabled ol$(rpm -E %{rhel})_codeready_builder 2>/dev/null || \
+    dnf config-manager --set-enabled powertools 2>/dev/null || \
+    dnf config-manager --set-enabled crb 2>/dev/null || true
+
+
+RUN dnf install -y \
+    https://download.postgresql.org/pub/repos/yum/reporpms/EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
+    dnf -qy module disable postgresql && \
+    dnf install -y postgresql18-devel postgresql18-server
+
+RUN dnf install -y \
+    gcc-toolset-13 \
+    gcc-toolset-13-gcc-c++  \
+    krb5-devel \
+    rpm-build \
+    rpmdevtools \
+    libcurl-devel \
+    openssl-devel \
+    make \
+    tar \
+    gzip
+
+RUN rpmdev-setuptree
+
+WORKDIR /build
+COPY . /build/
+
+RUN mkdir -p /root/rpmbuild/SOURCES && \
+    tar --exclude='.git' --exclude='./packaging' --exclude='./test' \
+        -czf /root/rpmbuild/SOURCES/pg_oidc_validator-0.1.tar.gz \
+        --transform='s,^,pg_oidc_validator-0.1/,' .
+
+RUN cp packaging/rpm/pg_oidc_validator.spec /root/rpmbuild/SPECS/
+
+RUN source /opt/rh/gcc-toolset-13/enable && \
+    rpmbuild -ba /root/rpmbuild/SPECS/pg_oidc_validator.spec
+
+RUN mkdir -p /output && \
+    cp /root/rpmbuild/RPMS/x86_64/*.rpm /output/ && \
+    cp /root/rpmbuild/SRPMS/*.rpm /output/ || true
+
+CMD ["/bin/bash"]
