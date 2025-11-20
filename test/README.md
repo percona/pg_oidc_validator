@@ -5,7 +5,7 @@ End-to-end test for pg_oidc_validator using Keycloak.
 ## Prerequisites
 
 - PostgreSQL 18 with pg_oidc_validator installed
-- Docker
+- Podman or Docker (Podman is preferred and automatically detected; Docker is used as fallback)
 - Ruby with bundler
 - Chrome/Chromium with chromedriver
 

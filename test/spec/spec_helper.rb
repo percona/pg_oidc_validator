@@ -60,12 +60,25 @@ module TestHelpers
     FileUtils.rm_rf(PGDATA)
   end
 
+  def container_runtime
+    @container_runtime ||= begin
+      # Check if podman is available, fallback to docker
+      if system("which podman > /dev/null 2>&1")
+        "podman"
+      elsif system("which docker > /dev/null 2>&1")
+        "docker"
+      else
+        raise "Neither podman nor docker is available"
+      end
+    end
+  end
+
   def setup_keycloak
-    run_command("docker ps -q --filter 'ancestor=quay.io/keycloak/keycloak:latest' | xargs -r docker stop", allow_failure: true)
+    run_command("#{container_runtime} ps -q --filter 'ancestor=quay.io/keycloak/keycloak:latest' | xargs -r #{container_runtime} stop", allow_failure: true)
     sleep 2
 
     cmd = [
-      "docker run -d --rm",
+      "#{container_runtime} run -d --rm",
       "-p #{KEYCLOAK_PORT}:8443",
       "-e KC_BOOTSTRAP_ADMIN_USERNAME=admin",
       "-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin",
@@ -85,7 +98,7 @@ module TestHelpers
   end
 
   def cleanup_keycloak
-    run_command("docker ps -q --filter 'ancestor=quay.io/keycloak/keycloak:latest' | xargs -r docker stop", allow_failure: true)
+    run_command("#{container_runtime} ps -q --filter 'ancestor=quay.io/keycloak/keycloak:latest' | xargs -r #{container_runtime} stop", allow_failure: true)
   end
 
   def extract_device_code(output)
