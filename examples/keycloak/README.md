@@ -11,7 +11,11 @@ This example provides a demo environment with Keycloak and PostgreSQL configured
 
 ### Required software
 
-Docker with Compose V2 installed (`docker compose` command)
+Either:
+- **Podman** with podman-compose installed (`podman-compose` command), or
+- **Docker** with Compose V2 installed (`docker compose` command)
+
+Both container runtimes are supported. The examples below use `docker compose` but you can substitute `podman-compose` if using Podman.
 
 ### Add keycloak to hosts file
 
@@ -32,7 +36,7 @@ This allows your browser to resolve the `https://keycloak:8443` URL used in the 
 ## Quick Start
 
 ```bash
-# Start Keycloak and PostgreSQL
+# Start Keycloak and PostgreSQL (use podman-compose if using Podman)
 docker compose up -d
 
 # Wait for services to be ready
@@ -45,6 +49,15 @@ docker compose run --rm psql-client
 
 # When done, stop the services
 docker compose down
+```
+
+**Using Podman instead:**
+```bash
+# Replace 'docker compose' with 'podman-compose' in the commands above
+podman-compose up -d
+podman-compose logs -f
+podman-compose run --rm psql-client
+podman-compose down
 ```
 
 ## Keycloak admin interface access

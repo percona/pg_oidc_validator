@@ -58,7 +58,7 @@ The `oauth_client_id` is whatever you have registered your postgres instance as 
 ## Setting up your OIDC provider
 
 ### Keycloak
-Keycloak is easy to run locally using docker for trying things out.
+Keycloak is easy to run locally using podman or docker for trying things out.
 
 Remember to enable the OAuth 2 device flow for the client you configure in keycloak, since that's the only OAuth flow libpq supports. You don't need to add any URLs in the keycloak configuration as they are not used.
 
