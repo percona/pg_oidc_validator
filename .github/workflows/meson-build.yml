@@ -75,4 +75,4 @@ jobs:
         cd pg-source
         cp build/compile_commands.json .
         cd contrib/pg_oidc_validator
-        clang-tidy-21 src/*
+        find src/ -iname '*.hpp' -o -iname '*.cpp' -exec clang-tidy-21 {} \;
