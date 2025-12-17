@@ -1,5 +1,5 @@
 Name:           pg_oidc_validator
-Version:        0.1
+Version:        0.2
 Release:        1%{?dist}
 Summary:        PostgreSQL OAuth/OIDC token validator extension
 
@@ -42,5 +42,8 @@ make USE_PGXS=1 install DESTDIR=%{buildroot} with_llvm=no COMPILER='g++ $(CXXFLA
 /usr/pgsql-18/lib/pg_oidc_validator.so
 
 %changelog
+* Thu Dec 17 2025 Percona <info@percona.com> - 0.2-1
+- Added basic caching for HTTP-requests based on Cache-Control directives
+
 * Thu Nov 14 2025 Percona <info@percona.com> - 0.1-1
 - Initial RPM package

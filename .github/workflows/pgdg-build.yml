@@ -63,7 +63,7 @@ jobs:
       run: |
         sudo mkdir pg-oidc-validator-pgdg18/DEBIAN
         sudo sh -c 'echo "Package: pg-oidc-validator-pgdg18" > pg-oidc-validator-pgdg18/DEBIAN/control'
-        sudo sh -c 'echo "Version: 0.1" >> pg-oidc-validator-pgdg18/DEBIAN/control'
+        sudo sh -c 'echo "Version: 0.2" >> pg-oidc-validator-pgdg18/DEBIAN/control'
         sudo sh -c 'echo "Architecture: amd64" >> pg-oidc-validator-pgdg18/DEBIAN/control'
         sudo sh -c 'echo "Maintainer: Percona" >> pg-oidc-validator-pgdg18/DEBIAN/control'
         sudo sh -c 'echo "Description: Experimental pg-oidc-validator extension" >> pg-oidc-validator-pgdg18/DEBIAN/control'
