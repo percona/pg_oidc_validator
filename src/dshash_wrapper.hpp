@@ -143,6 +143,7 @@ class dshash {
 
         if (state->area_handle == DSA_HANDLE_INVALID) {
           area = dsa_create(state->tranche_id);
+          dsa_pin(area);
           dsa_pin_mapping(area);
 
           dshash_parameters params = make_parameters(state->tranche_id);
