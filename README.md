@@ -1,4 +1,4 @@
-# pg\_oidc\_validator 0.1.0
+# pg_oidc_validator
 
 OAuth validator library for PostgreSQL 18
 
