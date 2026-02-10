@@ -7,6 +7,9 @@
 #include "http_client.hpp"
 #include "jwk.hpp"
 
+static const char* ModuleName = "pg_oidc_validator";
+static const char* ModuleVersion = "1.0.0";
+
 extern "C" {
 #include "postgres.h"
 //
@@ -16,7 +19,7 @@ extern "C" {
 #include "miscadmin.h"
 #include "utils/guc.h"
 
-PG_MODULE_MAGIC;
+PG_MODULE_MAGIC_EXT(.name = ModuleName, .version = ModuleVersion);
 }
 
 void validator_shutdown(ValidatorModuleState*);
