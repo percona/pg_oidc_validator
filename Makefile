@@ -30,3 +30,9 @@ endif
 
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(PG_CPPFLAGS) -c -o $@ $<
+
+oauth_conn_test: src/oauth_conn_test.o
+	$(CXX) -o $@ $< -L$(libdir) -lpq
+
+src/oauth_conn_test.o: src/oauth_conn_test.cpp
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -I$(includedir) -std=c++23 -c -o $@ $<
