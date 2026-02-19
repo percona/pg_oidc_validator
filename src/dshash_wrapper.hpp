@@ -106,6 +106,23 @@ class dshash {
 
   static dshash attach_shared(const char* dsm_name, const char* tranche_name) {
     return pg_try([&]() {
+#if PG_VERSION_NUM >= 190000
+      auto init_callback = [](void* ptr, void* arg) {
+        auto* state = static_cast<shared_state*>(ptr);
+        auto* name = static_cast<const char*>(arg);
+
+        int tranche_id = LWLockNewTrancheId(name);
+
+        LWLockInitialize(&state->lock, tranche_id);
+        state->tranche_id = tranche_id;
+        state->table_handle = DSHASH_HANDLE_INVALID;
+        state->area_handle = DSA_HANDLE_INVALID;
+      };
+
+      bool found = false;
+      void* segment_ptr =
+          GetNamedDSMSegment(dsm_name, shared_mem_size(), +init_callback, &found, const_cast<char*>(tranche_name));
+#else
       static thread_local const char* init_tranche_name = nullptr;
 
       auto init_callback = [](void* ptr) {
@@ -126,6 +143,7 @@ class dshash {
       void* segment_ptr = GetNamedDSMSegment(dsm_name, shared_mem_size(), +init_callback, &found);
 
       init_tranche_name = nullptr;
+#endif
 
       if (segment_ptr == nullptr) {
         std::string error_msg = "Failed to create or find DSM segment: ";
