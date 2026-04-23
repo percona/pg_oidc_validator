@@ -29,11 +29,15 @@ const OAuthValidatorCallbacks* _PG_oauth_validator_module_init(void) { return &v
 }
 
 static char* authn_field = nullptr;
+static bool enforce_scope = true;
 
 extern "C" void _PG_init() {
   DefineCustomStringVariable("pg_oidc_validator.authn_field",
                              gettext_noop("OAuth field used for matching PostgreSQL users"), nullptr, &authn_field,
                              "sub", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
+  DefineCustomBoolVariable("pg_oidc_validator.enforce_scope",
+                           gettext_noop("Whether to enforce scope validation against the OAuth token"), nullptr,
+                           &enforce_scope, true, PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
 }
 
 bool validate_token(const ValidatorModuleState* state, const char* token, const char* role,
@@ -109,7 +113,9 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   }
   PG_END_TRY();
 
-  if (issuer_is_azure(issuer)) {
+  if (!enforce_scope) {
+    res->authorized = true;
+  } else if (issuer_is_azure(issuer)) {
     if (strcmp(authn_field, "sub") == 0) {
       elog(WARNING,
            "sub field is not guaranteed to be unique with Entra ID, consider using a different field for user "
