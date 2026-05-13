@@ -125,15 +125,6 @@ jwt_verifier configure_verifier_with_jwks(const std::string& issuer, const picoj
                                           const std::string& required_kid) {
   std::string expected_issuer = issuer;
 
-  if (issuer_is_azure(issuer)) {
-    // Microsoft flow is tricky
-    // JWTs contain issuer referring to sts.windows.net, but device flow only
-    // works correctly with login.microsoftonline.com/v2
-    // we have to be aware of this and add custom issuer to the verifier
-    elog(DEBUG1, "Detected Azure issuer, will use custom issuer validation");
-    expected_issuer = convert_azure_issuer_to_jwt_format(issuer);
-  }
-
   auto verifier = jwt::verify().with_issuer(expected_issuer);
 
   if (!jwksInfo.is<picojson::object>()) {
