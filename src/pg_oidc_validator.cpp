@@ -32,10 +32,18 @@ const OAuthValidatorCallbacks* _PG_oauth_validator_module_init(void) { return &v
 
 static char* authn_field = nullptr;
 
+// When non-empty, the validator uses this URL (instead of pg_hba's `issuer=`)
+static char* discovery_url_override = nullptr;
+
 extern "C" void _PG_init() {
   DefineCustomStringVariable("pg_oidc_validator.authn_field",
                              gettext_noop("OAuth field used for matching PostgreSQL users"), nullptr, &authn_field,
                              "sub", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
+  DefineCustomStringVariable(
+      "pg_oidc_validator.discovery_url_override",
+      gettext_noop("If set, fetch OIDC discovery and JWKS from this URL instead of the pg_hba issuer."),
+      gettext_noop("The JWT `iss` claim is still validated against the pg_hba issuer."), &discovery_url_override, "",
+      PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
 }
 
 bool validate_token(const ValidatorModuleState* state, const char* token, const char* role,
@@ -54,9 +62,11 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   const scopes_t required_scopes(std::istream_iterator<std::string>(required_iss),
                                  std::istream_iterator<std::string>{});
   const std::string issuer = MyProcPort->hba->oauth_issuer;
+  const std::string discovery_url =
+      (discovery_url_override != nullptr && *discovery_url_override != '\0') ? discovery_url_override : issuer;
 
   http_client http;
-  const auto issuer_info = http.get_json(issuer_info_url(issuer));
+  const auto issuer_info = http.get_json(issuer_info_url(discovery_url));
 
   if (!issuer_info.is<picojson::object>()) {
     elog(WARNING, "OpenID configuration from issuer is not a JSON object");
