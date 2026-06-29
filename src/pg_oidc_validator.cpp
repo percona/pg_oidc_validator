@@ -1,6 +1,8 @@
 #include <jwt-cpp/jwt.h>
 
+#include <iterator>
 #include <ranges>
+#include <sstream>
 #include <string>
 
 #include "http_cache.hpp"
@@ -48,10 +50,9 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
     elog(WARNING, "Failed to attach to HTTP cache: %s", ex.what());
   }
 
-  auto required_scopes_range = std::string(MyProcPort->hba->oauth_scope) | std::views::split(' ') |
-                               std::views::transform([](auto r) { return std::string(r.data(), r.size()); });
-
-  const scopes_t required_scopes(required_scopes_range.begin(), required_scopes_range.end());
+  std::istringstream required_iss(std::string(MyProcPort->hba->oauth_scope));
+  const scopes_t required_scopes(std::istream_iterator<std::string>(required_iss),
+                                 std::istream_iterator<std::string>{});
   const std::string issuer = MyProcPort->hba->oauth_issuer;
 
   http_client http;
@@ -94,8 +95,11 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   PG_TRY();
   {
     if (!payload.contains(authn_field)) {
-      const auto available_claims = payload | std::views::keys | std::views::join_with(std::string(", "));
-      const std::string claims_str(available_claims.begin(), available_claims.end());
+      std::string claims_str;
+      for (const auto& kv : payload) {
+        if (!claims_str.empty()) claims_str += ", ";
+        claims_str += kv.first;
+      }
       elog(WARNING, "OAuth failed: claim '%s' (authn_field) is missing. Available claims: %s", authn_field,
            claims_str.c_str());
       return false;
@@ -124,10 +128,16 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   }
 
   if (!res->authorized) {
-    const auto req = required_scopes | std::views::join_with(std::string(", "));
-    const std::string req_str(req.begin(), req.end());
-    const auto rec = received_scopes | std::views::join_with(std::string(", "));
-    const std::string rec_str(rec.begin(), rec.end());
+    std::string req_str;
+    for (const auto& s : required_scopes) {
+      if (!req_str.empty()) req_str += ", ";
+      req_str += s;
+    }
+    std::string rec_str;
+    for (const auto& s : received_scopes) {
+      if (!rec_str.empty()) rec_str += ", ";
+      rec_str += s;
+    }
     elog(LOG, "Authorization failed because of scope mismatch. Required scopes: %s. Received scopes: %s",
          req_str.c_str(), rec_str.c_str());
   } else {
