@@ -1,5 +1,13 @@
 #pragma once
 
+// jwt-cpp defines PICOJSON_USE_INT64 before including picojson.h, adding
+// an int64_t member to picojson::_storage.  Without the same define here,
+// http_client.o sees a differently-shaped union than the other translation
+// units, triggering -Wodr and -Wlto-type-mismatch under LTO (-flto).
+// Keep in sync with what jwt-cpp/jwt.h does.
+#ifndef PICOJSON_USE_INT64
+#define PICOJSON_USE_INT64
+#endif
 #include <picojson/picojson.h>
 
 #include <optional>
