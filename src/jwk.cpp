@@ -1,7 +1,9 @@
 #include "jwk.hpp"
 
+#include <iterator>
 #include <ranges>
 #include <regex>
+#include <sstream>
 
 extern "C" {
 #include "postgres.h"
@@ -39,7 +41,7 @@ void configure_rsa_key(const picojson::object& keyObject, const std::string& kid
   const auto e_it = keyObject.find("e");
 
   if (n_it == keyObject.end() || e_it == keyObject.end()) {
-    throw std::runtime_error(std::format("RSA key missing required 'n'/'e' components (kid: {})", kid));
+    throw std::runtime_error("RSA key missing required 'n'/'e' components (kid: " + kid + ")");
   }
 
   const std::string n = n_it->second.to_str();
@@ -60,7 +62,7 @@ void configure_rsa_key(const picojson::object& keyObject, const std::string& kid
   } else if (alg == "PS512") {
     verifier = verifier.allow_algorithm(jwt::algorithm::ps512(pem_key));
   } else {
-    throw std::runtime_error(std::format("Unsupported RSA algorithm: {} (kid: {})", alg, kid));
+    throw std::runtime_error("Unsupported RSA algorithm: " + alg + " (kid: " + kid + ")");
   }
 }
 
@@ -71,7 +73,7 @@ void configure_ec_key(const picojson::object& keyObject, const std::string& kid,
   const auto crv_it = keyObject.find("crv");
 
   if (x_it == keyObject.end() || y_it == keyObject.end() || crv_it == keyObject.end()) {
-    throw std::runtime_error(std::format("EC key missing required 'x'/'y'/'crv' components (kid: {})", kid));
+    throw std::runtime_error("EC key missing required 'x'/'y'/'crv' components (kid: " + kid + ")");
   }
 
   const std::string x = x_it->second.to_str();
@@ -87,7 +89,7 @@ void configure_ec_key(const picojson::object& keyObject, const std::string& kid,
   } else if (alg == "ES512" && crv == "P-521") {
     verifier = verifier.allow_algorithm(jwt::algorithm::es512(pem_key));
   } else {
-    throw std::runtime_error(std::format("Unsupported EC algorithm/curve combination: {}/{} (kid: {})", alg, crv, kid));
+    throw std::runtime_error("Unsupported EC algorithm/curve combination: " + alg + "/" + crv + " (kid: " + kid + ")");
   }
 }
 
@@ -96,7 +98,7 @@ void configure_hmac_key(const picojson::object& keyObject, const std::string& ki
   const auto k_it = keyObject.find("k");
 
   if (k_it == keyObject.end()) {
-    throw std::runtime_error(std::format("HMAC key missing required 'k' component (kid: {})", kid));
+    throw std::runtime_error("HMAC key missing required 'k' component (kid: " + kid + ")");
   }
 
   const std::string k = keyObject.at("k").to_str();
@@ -108,13 +110,13 @@ void configure_hmac_key(const picojson::object& keyObject, const std::string& ki
   } else if (alg == "HS512") {
     verifier = verifier.allow_algorithm(jwt::algorithm::hs512{k});
   } else {
-    throw std::runtime_error(std::format("Unsupported HMAC algorithm: {} (kid: {})", alg, kid));
+    throw std::runtime_error("Unsupported HMAC algorithm: " + alg + " (kid: " + kid + ")");
   }
 }
 
 std::string get_required_parameter(picojson::object const& key_object, std::string const& name) {
   if (!key_object.contains(name)) {
-    throw std::runtime_error(std::format("Required parameter '{}' is missing", name));
+    throw std::runtime_error("Required parameter '" + name + "' is missing");
   }
   return key_object.at(name).to_str();
 }
@@ -171,7 +173,7 @@ jwt_verifier configure_verifier_with_jwks(const std::string& issuer, const picoj
     } else if (kty == "oct") {
       configure_hmac_key(key_object, kid, alg, verifier);
     } else {
-      throw std::runtime_error(std::format("Unsupported key type: {} (kid: {})", kty, kid));
+      throw std::runtime_error("Unsupported key type: " + kty + " (kid: " + kid + ")");
     }
 
     break;
@@ -201,9 +203,8 @@ scopes_t parse_jwt_scopes(const picojson::value& jsonScopes) {
     return {scope_range.begin(), scope_range.end()};
   }
   if (jsonScopes.is<std::string>()) {
-    auto scope_range = jsonScopes.get<std::string>() | std::views::split(' ') |
-                       std::views::transform([](auto r) { return std::string(r.data(), r.size()); });
-    return {scope_range.begin(), scope_range.end()};
+    std::istringstream iss(jsonScopes.get<std::string>());
+    return scopes_t(std::istream_iterator<std::string>(iss), std::istream_iterator<std::string>{});
   }
 
   return {};
