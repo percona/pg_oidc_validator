@@ -96,6 +96,11 @@ psql 'host=127.0.0.1 dbname=name user=rolename oauth_issuer=https://127.0.0.1:80
 Google has some quirks which are currently not supported by the libpq device code implementation.
 It is only usable with custom clients that do not rely on the internal device flow.
 
+## Dex
+Dex doesn't support OAuth scopes, it doesn't include the parameter in the tokens.
+While the use of scopes is strongly recommended for OAuth, and the parameter is required in pg_hba, it can be the empty string.
+Specifying `scope=""` disables scope validation.
+
 ## Testing
 
 The validator has a basic test suite, documented under [test/README.md](test/README.md).

@@ -96,7 +96,11 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   const auto json_scope = parse_jwt_scopes(decoded_token.get_payload_json()["scope"]);
   received_scopes.insert(json_scope.begin(), json_scope.end());
 
-  if (received_scopes.empty()) {
+  if (required_scopes.empty()) {
+    // An explicitly empty scope opts out of scope validation.
+    // While this isn't recommended, it gives a workaround for some OIDC providers.
+    elog(DEBUG1, "Configured scope is empty; skipping scope validation");
+  } else if (received_scopes.empty()) {
     elog(WARNING, "Access token contains no scopes");
   }
 
@@ -123,7 +127,9 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   }
   PG_END_TRY();
 
-  if (issuer_is_azure(issuer)) {
+  if (required_scopes.empty()) {
+    res->authorized = true;
+  } else if (issuer_is_azure(issuer)) {
     if (strcmp(authn_field, "sub") == 0) {
       elog(WARNING,
            "sub field is not guaranteed to be unique with Entra ID, consider using a different field for user "
