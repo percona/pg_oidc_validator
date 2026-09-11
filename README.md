@@ -16,6 +16,35 @@ Experimental packages are available on github:
 **RHEL/Oracle Linux/Rocky Linux:**
 - RPM packages for OL8 and OL9 are available [here](https://github.com/Percona-Lab/pg_oidc_validator/releases/tag/latest).
 
+### Container image for CloudNativePG
+
+The `Container image` workflow builds the validator as a [CloudNativePG
+image-volume extension image](https://cloudnative-pg.io/docs/devel/imagevolume_extensions)
+and publishes it to `ghcr.io/<owner>/pg-oidc-validator`, tagged
+`<pg_major>-<distro>` (moving) and `<pg_major>-<distro>-<yyyymmdd>`
+(immutable — pin this one in gitops, since changing an extension image
+restarts the postgres pods). The image carries the module under `lib/` and
+the libcurl dependency closure under `system/`, because the CloudNativePG
+postgres image ships no libcurl. Consume it from a `Cluster` like:
+
+```yaml
+spec:
+  postgresql:
+    extensions:
+      - name: pg-oidc-validator
+        image:
+          reference: ghcr.io/<owner>/pg-oidc-validator:18-trixie-<yyyymmdd>
+        ld_library_path:
+          - system
+    parameters:
+      oauth_validator_libraries: "pg_oidc_validator"
+```
+
+Requires PostgreSQL 18+, CloudNativePG 1.27+, Kubernetes 1.35+ (or
+1.33/1.34 with the `ImageVolume` feature gate), and containerd 2.1+ or
+CRI-O 1.31+. The image only works against the postgres major and distro it
+was built in.
+
 ### Building from Source
 
 To build and install from sources, use `make USE_PGXS=1 install -j`.

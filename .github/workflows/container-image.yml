@@ -1,0 +1,55 @@
+name: Container image
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    # Weekly rebuild: the image vendors libcurl, so its security fixes only
+    # reach users through fresh builds.
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+env:
+  PG_MAJOR: "18"
+  DISTRO: trixie
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout pg_oidc_validator extension
+      uses: actions/checkout@v4
+
+    - name: Compute date tag
+      id: date
+      run: echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GHCR
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Two tags per build: the moving <pg_major>-<distro> tag and a dated
+    # immutable one, so gitops consumers can pin exact images (changing an
+    # extension image restarts the postgres pods).
+    - name: Build (and push, outside pull requests)
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: |
+          ghcr.io/${{ github.repository_owner }}/pg-oidc-validator:${{ env.PG_MAJOR }}-${{ env.DISTRO }}
+          ghcr.io/${{ github.repository_owner }}/pg-oidc-validator:${{ env.PG_MAJOR }}-${{ env.DISTRO }}-${{ steps.date.outputs.date }}
