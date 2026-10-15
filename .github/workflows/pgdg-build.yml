@@ -10,7 +10,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     # PGDG's PostgreSQL 18 and its server headers are preinstalled in the image.
-    container: ghcr.io/percona-lab/pg_github_actions_images/pgdg:18
+    container: ghcr.io/percona-lab/pg_github_actions_images/pgdg:18-ubuntu24.04
 
     steps:
     - name: Checkout pg_oidc_validator extension

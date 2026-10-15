@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     # PostgreSQL 18 (REL_18_STABLE) is already built and installed in the image,
     # with pg_config on PATH, so only the extension is built here.
-    container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized
+    container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized-ubuntu24.04
     env:
       CC: clang-21
       CXX: clang++-21
@@ -25,7 +25,7 @@ jobs:
         submodules: true
 
     - name: Install dependencies
-      run: .github/scripts/ubuntu-deps.sh
+      run: .github/scripts/ubuntu-deps.sh llvm
 
     # pg_config describes the image's PostgreSQL, which was not built with the
     # toolchain above, and PGXS takes CC, CXX, CXXFLAGS and LDFLAGS from it

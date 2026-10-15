@@ -1,7 +1,8 @@
 #!/bin/bash
 #
 # Installs everything the Ubuntu CI jobs need to build pg_oidc_validator, and
-# PostgreSQL itself for the in-tree builds.
+# PostgreSQL itself for the in-tree builds. With "llvm" as the argument it also
+# installs the clang-21/libc++ toolchain from apt.llvm.org.
 #
 # Jobs running in the shared CI images (percona-lab/pg_github_actions_images)
 # call it too: the images provide PostgreSQL and the common build dependencies,
@@ -48,7 +49,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${DEPS[@]}"
 
 # apt.llvm.org is a third-party repository, so skip it when the toolchain is
 # already present.
-if ! dpkg -s "${LLVM_DEPS[@]}" >/dev/null 2>&1; then
+if [ "$1" = llvm ] && ! dpkg -s "${LLVM_DEPS[@]}" >/dev/null 2>&1; then
     sudo DEBIAN_FRONTEND=noninteractive bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)" -- $LLVM_VERSION
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${LLVM_DEPS[@]}"
 fi
