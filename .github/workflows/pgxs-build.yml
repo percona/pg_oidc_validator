@@ -9,6 +9,9 @@ jobs:
   pgxs-build:
     name: Build
     runs-on: ubuntu-latest
+    # PostgreSQL 18 (REL_18_STABLE) is already built and installed in the image,
+    # with pg_config on PATH, so only the extension is built here.
+    container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized
     env:
       CC: clang-21
       CXX: clang++-21
@@ -16,60 +19,18 @@ jobs:
       LDFLAGS: -stdlib=libc++
 
     steps:
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          pkg-config \
-          libjwt-dev \
-          libcurl4-openssl-dev \
-          libssl-dev \
-          libreadline-dev \
-          zlib1g-dev \
-          libxml2-dev \
-          libxslt1-dev \
-          uuid-dev \
-          flex \
-          bison
-        wget https://apt.llvm.org/llvm.sh
-        chmod +x llvm.sh
-        sudo ./llvm.sh 21 all
-        sudo apt-get install libc++-21-dev libc++abi-21-dev
-
-    - name: Checkout PostgreSQL source
-      uses: actions/checkout@v4
-      with:
-        repository: postgres/postgres
-        ref: REL_18_STABLE
-        path: pg-source
-
-    - name: Configure and build PostgreSQL
-      run: |
-        cd pg-source
-        ./configure \
-          --prefix=/usr/local/pgsql \
-          --enable-debug \
-          --enable-cassert
-        make -j$(nproc)
-
-    - name: Install PostgreSQL
-      run: |
-        cd pg-source
-        sudo make install
-        sudo ldconfig
-
-    - name: Add PostgreSQL binaries to PATH
-      run: |
-        echo "/usr/local/pgsql/bin" >> $GITHUB_PATH
-
     - name: Checkout pg_oidc_validator extension
       uses: actions/checkout@v4
       with:
         submodules: true
 
+    - name: Install dependencies
+      run: .github/scripts/ubuntu-deps.sh
+
+    # pg_config describes the image's PostgreSQL, which was not built with the
+    # toolchain above, and PGXS takes CC, CXX, CXXFLAGS and LDFLAGS from it
+    # rather than from the environment. So pass the compilers on the command
+    # line and add the libc++ flags through PGXS's own hooks.
     - name: Build pg_oidc_validator with PGXS
       run: |
-        export USE_PGXS=1
-        export PG_CONFIG=/usr/local/pgsql/bin/pg_config
-        make -j
+        make -j USE_PGXS=1 CC="$CC" CXX="$CXX" PG_CXXFLAGS="$CXXFLAGS" PG_LDFLAGS="$LDFLAGS"

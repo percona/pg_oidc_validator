@@ -9,6 +9,10 @@ jobs:
   meson-build:
     name: Build and Clang-Tidy
     runs-on: ubuntu-latest
+    # Provides PostgreSQL's build dependencies; ubuntu-deps.sh adds the
+    # clang-21/libc++ toolchain. PostgreSQL itself is still built from source
+    # below, because this job builds the extension in-tree.
+    container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized
     env:
       CC: clang-21
       CXX: clang++-21
@@ -16,29 +20,6 @@ jobs:
       LDFLAGS: -stdlib=libc++
 
     steps:
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential \
-          meson \
-          ninja-build \
-          pkg-config \
-          libjwt-dev \
-          libcurl4-openssl-dev \
-          libssl-dev \
-          libreadline-dev \
-          zlib1g-dev \
-          libxml2-dev \
-          libxslt1-dev \
-          uuid-dev \
-          flex \
-          bison
-        wget https://apt.llvm.org/llvm.sh
-        chmod +x llvm.sh
-        sudo ./llvm.sh 21 all
-        sudo apt-get install libc++-21-dev libc++abi-21-dev clang-tidy-21
-
     - name: Checkout PostgreSQL source
       uses: actions/checkout@v4
       with:
@@ -52,6 +33,9 @@ jobs:
       with:
         path: pg-source/contrib/pg_oidc_validator
         submodules: true
+
+    - name: Install dependencies
+      run: pg-source/contrib/pg_oidc_validator/.github/scripts/ubuntu-deps.sh
 
     - name: Add pg_oidc_validator to contrib meson.build
       run: |
