@@ -7,11 +7,12 @@ on:
 
 jobs:
   make-build:
-    name: Build
+    name: Build in-tree and with PGXS
     runs-on: ubuntu-latest
     # The image's PostgreSQL tree (REL_18_STABLE) is configured and built, with
-    # its object files kept, so the extension is built in-tree there without
-    # rebuilding PostgreSQL.
+    # its object files kept, and installed with pg_config on PATH, so the
+    # extension is built both in-tree and with PGXS without rebuilding
+    # PostgreSQL.
     container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized-ubuntu24.04
     env:
       CC: clang-21
@@ -28,14 +29,19 @@ jobs:
     - name: Install dependencies
       run: .github/scripts/ubuntu-deps.sh llvm
 
+    # Copied before the PGXS build below, so that contrib gets a clean tree.
     - name: Copy pg_oidc_validator into contrib
       run: cp -r . "$PG_SOURCE_DIR/contrib/pg_oidc_validator"
 
-    # The tree was not configured with the toolchain above, and Makefile.global
-    # sets CC, CXX, CXXFLAGS and LDFLAGS rather than taking them from the
-    # environment. So pass the compilers on the command line and add the libc++
-    # flags through PGXS's own hooks.
+    # Neither the image's tree nor its pg_config was configured with the
+    # toolchain above, and Makefile.global sets CC, CXX, CXXFLAGS and LDFLAGS
+    # rather than taking them from the environment. So pass the compilers on
+    # the command line and add the libc++ flags through PGXS's own hooks.
     - name: Build pg_oidc_validator in-tree
       run: |
         make -j -C "$PG_SOURCE_DIR/contrib/pg_oidc_validator" \
           CC="$CC" CXX="$CXX" PG_CXXFLAGS="$CXXFLAGS" PG_LDFLAGS="$LDFLAGS"
+
+    - name: Build pg_oidc_validator with PGXS
+      run: |
+        make -j USE_PGXS=1 CC="$CC" CXX="$CXX" PG_CXXFLAGS="$CXXFLAGS" PG_LDFLAGS="$LDFLAGS"

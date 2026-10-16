@@ -10,9 +10,9 @@ jobs:
     name: Build and Clang-Tidy
     runs-on: ubuntu-latest
     # Provides PostgreSQL's build dependencies; ubuntu-deps.sh adds the
-    # clang-21/libc++ toolchain. PostgreSQL itself is still built from source
-    # below, because this job builds the extension in-tree.
-    container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized-ubuntu24.04
+    # clang-21/libc++ toolchain. PostgreSQL itself is built from source below,
+    # with the extension in-tree, so the image needs no prebuilt PostgreSQL.
+    container: ghcr.io/percona-lab/pg_github_actions_images/base-dev:24.04
     env:
       CC: clang-21
       CXX: clang++-21
