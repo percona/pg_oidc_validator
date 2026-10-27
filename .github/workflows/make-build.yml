@@ -13,6 +13,7 @@ jobs:
   make-build:
     name: Build
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     container: ghcr.io/percona-lab/pg_github_actions_images/postgres-source:pgdg-18-clang-debugoptimized-ubuntu24.04
     env:
       CC: clang-21
