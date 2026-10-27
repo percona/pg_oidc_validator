@@ -13,6 +13,7 @@ jobs:
   meson-build:
     name: Build and Clang-Tidy
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     container: ghcr.io/percona-lab/pg_github_actions_images/base-dev:24.04
     env:
       CC: clang-21

@@ -13,6 +13,7 @@ jobs:
   pgdg-build:
     name: Build
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     container: ghcr.io/percona-lab/pg_github_actions_images/pgdg:18-ubuntu24.04
 
     steps:
@@ -74,6 +75,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     needs: [pgdg-build]
 
     steps:
