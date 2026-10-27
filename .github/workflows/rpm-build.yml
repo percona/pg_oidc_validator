@@ -5,10 +5,15 @@ on:
     branches: [ main ]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build-rpm:
     name: Build RPM (${{ matrix.distro_name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -20,16 +25,11 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install Podman
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y podman
+      uses: actions/checkout@v7
 
     - name: Build RPM for ${{ matrix.distro_name }}
       run: |
-        CONTAINER_RUNTIME=podman ./packaging/rpm/build-rpm.sh ${{ matrix.distro }}
+        ./packaging/rpm/build-rpm.sh ${{ matrix.distro }}
 
     - name: List built RPMs
       run: |
@@ -37,7 +37,7 @@ jobs:
         ls -lh packaging/rpm/output/${{ matrix.distro_name }}/
 
     - name: Upload RPM artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pg-oidc-validator-${{ matrix.distro_name }}-rpm
         path: packaging/rpm/output/${{ matrix.distro_name }}/*.rpm
@@ -45,13 +45,14 @@ jobs:
 
   publish-rpm:
     name: Publish RPM Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     needs: [build-rpm]
     if: "github.repository == 'Percona-Lab/pg_oidc_validator' && github.ref_name == 'main' && github.event_name == 'push'"
 
     steps:
     - name: Download all RPM artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: pg-oidc-validator-*-rpm
         path: ./all-rpms
