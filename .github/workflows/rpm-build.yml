@@ -24,7 +24,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Install Podman
       run: |
@@ -41,7 +41,7 @@ jobs:
         ls -lh packaging/rpm/output/${{ matrix.distro_name }}/
 
     - name: Upload RPM artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pg-oidc-validator-${{ matrix.distro_name }}-rpm
         path: packaging/rpm/output/${{ matrix.distro_name }}/*.rpm
@@ -55,7 +55,7 @@ jobs:
 
     steps:
     - name: Download all RPM artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: pg-oidc-validator-*-rpm
         path: ./all-rpms
