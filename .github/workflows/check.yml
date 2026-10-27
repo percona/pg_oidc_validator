@@ -1,12 +1,17 @@
-name: clang-format Check
-on: [push, pull_request]
+name: Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  formatting-check:
-    name: Formatting Check
+  format:
+    name: Format
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7

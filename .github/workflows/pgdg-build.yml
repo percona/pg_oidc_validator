@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pgxs-build:
+  pgdg-build:
     name: Build
     runs-on: ubuntu-24.04
 
@@ -97,7 +97,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-24.04
-    needs: [pgxs-build]
+    needs: [pgdg-build]
 
     steps:
     - name: Checkout code
