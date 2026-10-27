@@ -13,6 +13,7 @@ jobs:
   format:
     name: Format
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
     - uses: actions/checkout@v7
     - name: Run clang-format style check for C/C++/Protobuf programs.
