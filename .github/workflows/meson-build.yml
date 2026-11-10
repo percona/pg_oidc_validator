@@ -8,7 +8,7 @@ on:
 jobs:
   meson-build:
     name: Build and Clang-Tidy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CC: clang-21
       CXX: clang++-21
