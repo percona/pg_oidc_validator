@@ -44,7 +44,7 @@ jobs:
         sudo apt-get install libc++-21-dev libc++abi-21-dev clang-tidy-21
 
     - name: Checkout PostgreSQL source
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: postgres/postgres
         ref: REL_18_STABLE
@@ -52,7 +52,7 @@ jobs:
         submodules: recursive
 
     - name: Checkout pg_oidc_validator extension
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         path: pg-source/contrib/pg_oidc_validator
         submodules: true

@@ -43,7 +43,7 @@ jobs:
         sudo apt-get install -y postgresql-18 postgresql-server-dev-18
 
     - name: Checkout pg_oidc_validator extension
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Build pg_oidc_validator with PGDG
       run: |
@@ -58,7 +58,7 @@ jobs:
         sudo cp /usr/lib/postgresql/18/lib/pg_oidc_validator* pg-oidc-validator-pgdg18/usr/lib/postgresql/18/lib/
 
     - name: Upload tgz
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pg-oidc-validator-pgdg18-binary
         path: pg-oidc-validator-pgdg18
@@ -79,7 +79,7 @@ jobs:
         sudo dpkg -i --debug=7777 pg-oidc-validator-pgdg18.deb
 
     - name: Upload deb
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pg-oidc-validator-deb
         path: pg-oidc-validator-pgdg18.deb
@@ -89,7 +89,7 @@ jobs:
         cd pg-oidc-validator-pgdg18 && sudo tar -czvf ../pg-oidc-validator-pgdg18.tar.gz .
 
     - name: Upload tgz artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: pg-oidc-validator-tgz
         path: pg-oidc-validator-pgdg18.tar.gz
@@ -101,10 +101,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Download built package
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: pg-oidc-validator-deb
 
@@ -158,7 +158,7 @@ jobs:
 
     - name: Upload test logs on failure
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: test-logs
         path: |
@@ -171,7 +171,7 @@ jobs:
 
     - name: Download tgz artifact
       if: "github.repository == 'Percona-Lab/pg_oidc_validator' && github.ref_name == 'main' && (github.event_name == 'push' || github.event_name == 'schedule')"
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: pg-oidc-validator-tgz
 
