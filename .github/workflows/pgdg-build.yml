@@ -8,7 +8,7 @@ on:
 jobs:
   pgxs-build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Install dependencies
@@ -92,7 +92,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [pgxs-build]
 
     steps:
