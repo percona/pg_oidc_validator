@@ -56,6 +56,35 @@ It is mainly intended for testing, but can be also used in environment where the
 
 Setting this variable doesn't change the issuer used during JWT validation.
 
+### pg_oidc_validator.audience
+
+This variable controls which values are accepted in the `aud` claim of the provided JWT token.
+
+The `aud` claim names the service a token was minted for.
+An issuer typically serves several services, so without this check any token from the configured issuer is accepted,
+including one a user obtained for an unrelated service.
+Setting this variable to the identifier the provider uses for PostgreSQL (with most providers, the client id)
+restricts logins to tokens actually intended for this server.
+
+The value is a comma separated list, and a token is accepted if its `aud` claim names any of the listed audiences.
+More than one entry is useful while migrating between client ids or providers;
+each entry is another service whose tokens this server accepts.
+Elements containing whitespace or a comma have to be double quoted.
+
+```
+pg_oidc_validator.audience = 'postgres-client,api://postgres'
+```
+
+The claim itself may be either a string or an array of strings, and both are matched against the list.
+
+By default this variable is empty, which keeps the `aud` claim unvalidated.
+The validator writes a message to the server log on every authentication while that is the case.
+
+A value that is not a well formed list is reported as a `WARNING` when it is loaded, and refuses every OAuth login
+until it is corrected, naming the reason in the server log each time.
+It deliberately does not fall back to leaving the `aud` claim unvalidated,
+which would turn a typo into a silently disabled check.
+
 ## Usage
 
 Use a connection string with OAuth to connect to the server.
