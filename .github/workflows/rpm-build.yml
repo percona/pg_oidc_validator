@@ -26,14 +26,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v7
 
-    - name: Install Podman
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y podman
-
     - name: Build RPM for ${{ matrix.distro_name }}
       run: |
-        CONTAINER_RUNTIME=podman ./packaging/rpm/build-rpm.sh ${{ matrix.distro }}
+        ./packaging/rpm/build-rpm.sh ${{ matrix.distro }}
 
     - name: List built RPMs
       run: |
