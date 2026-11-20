@@ -11,8 +11,11 @@ concurrency:
 
 jobs:
   pgxs-build:
-    name: Build
-    runs-on: ubuntu-24.04
+    name: Build and test (${{ matrix.runner }})
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
     env:
       CC: clang-21
       CXX: clang++-21
@@ -77,3 +80,4 @@ jobs:
         export USE_PGXS=1
         export PG_CONFIG=/usr/local/pgsql/bin/pg_config
         make -j
+        make check-claims

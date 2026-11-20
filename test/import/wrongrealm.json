@@ -856,7 +856,17 @@
       "include.in.token.scope" : "true",
       "consent.screen.text" : "PgTest Scope",
       "display.on.consent.screen" : "true"
-    }
+    },
+    "protocolMappers" : [ {
+      "name" : "PostgreSQL resource",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-audience-mapper",
+      "config" : {
+        "included.custom.audience" : "postgresql-test",
+        "access.token.claim" : "true",
+        "id.token.claim" : "false"
+      }
+    } ]
   }, {
     "id" : "c9c56a1d-ee81-49af-92eb-44300755e06e",
     "name" : "email",

@@ -27,11 +27,12 @@ To build and install from sources, use `make USE_PGXS=1 install -j`.
 1. Enable the validator in `postgresql.conf`:
   ```
   oauth_validator_libraries=pg_oidc_validator
+  pg_oidc_validator.audience = 'postgresql-resource'
   ```
 2. Add entries to `pg_hba.conf` that enables OAuth authentication.
   Example:
   ```
-  host    all             all             127.0.0.1/32            oauth	scope="openid testScope",issuer=https://url.to.the.oidc.issuer
+  hostssl all             all             127.0.0.1/32            oauth	scope="openid testScope",issuer=https://url.to.the.oidc.issuer
   ```
 3. Restart the server
 ```
@@ -39,6 +40,10 @@ pg_ctl -D <datadir> restart
 ```
 
 ## Configuration variables
+
+### pg_oidc_validator.audience
+
+Set this to the audience assigned by your provider to the PostgreSQL resource. The server requires that exact value in the signed access token's `aud` claim (a string, or a member of the audience array). Configure this setting before upgrading. OAuth logins are denied if it is empty. Tokens must also have a valid expiration time.
 
 ### pg_oidc_validator.authn_field
 
@@ -58,12 +63,12 @@ Setting this variable doesn't change the issuer used during JWT validation.
 
 ## Usage
 
-Use a connection string with OAuth to connect to the server.
+Use a TLS connection to the server with its certificate authority trusted by the client.
 
 Example with `psql`:
 
 ```
-psql 'host=127.0.0.1 dbname=name oauth_issuer=https://url.to.the.oidc.issuer oauth_client_id=client-id-registered-in-provider oauth_client_secret=optional-client-secret'
+psql 'host=db.example.com sslmode=verify-full dbname=name oauth_issuer=https://url.to.the.oidc.issuer oauth_client_id=client-id-registered-in-provider oauth_client_secret=optional-client-secret'
 ```
 
   > **__NOTE__:** `oauth_client_secret` is only necessary if the provider is configured to require one.
@@ -89,8 +94,8 @@ psql 'host=127.0.0.1 dbname=name user=rolename oauth_issuer=https://127.0.0.1:80
 
 ### Microsoft / Entra ID
 * `oauth_issuer` for postgres should be `https://login.microsoftonline.com/<tenant_id>/v2.0`
-* It generates different JWTs for providers without custom scopes and with custom scopes.
-  The library can only validate JWTs with custom scopes; use the full scope name (api://<application id>/<scope name>) in the `scope` parameter in `pg_hba.conf`
+* For v2 access tokens, set `pg_oidc_validator.audience` to the PostgreSQL resource application's client ID (GUID). Expose a delegated permission on that application, and request its full name, such as `api://<resource-app-id>/connect`, in the OAuth HBA rule. The token must include the corresponding permission in `scp`.
+* Use `pg_oidc_validator.authn_field = 'oid'` and map the user's object ID from the configured tenant to a database role in `pg_ident.conf`. Use a `hostssl` rule for those roles and retain the existing HBA rules for service accounts. Leave `delegate_ident_mapping` disabled so PostgreSQL verifies the requested role.
 
 ## Google OIDC
 Google has some quirks which are currently not supported by the libpq device code implementation.
