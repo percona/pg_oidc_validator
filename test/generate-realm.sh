@@ -110,6 +110,18 @@ EOF
     # Store IDs for client scope assignment later
     eval "local ${scope_name}_id=$scope_id"
   done
+  kcadm create "client-scopes/$pgscope_id/protocol-mappers/models" -r "$realm" -f - <<'EOF'
+{
+  "name": "PostgreSQL resource",
+  "protocol": "openid-connect",
+  "protocolMapper": "oidc-audience-mapper",
+  "config": {
+    "included.custom.audience": "postgresql-test",
+    "access.token.claim": "true",
+    "id.token.claim": "false"
+  }
+}
+EOF
   echo "    Added as default optional client scopes."
 
   echo "    Creating clients..."

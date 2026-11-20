@@ -24,18 +24,33 @@ To build and install from sources, use `make USE_PGXS=1 install -j`.
 
 ## Configuration
 
-1. Enable the validator in `postgresql.conf`:
-  ```
-  oauth_validator_libraries=pg_oidc_validator
-  ```
-2. Add entries to `pg_hba.conf` that enables OAuth authentication.
-  Example:
-  ```
-  host    all             all             127.0.0.1/32            oauth	scope="openid testScope",issuer=https://url.to.the.oidc.issuer
-  ```
-3. Restart the server
+Enable the validator in `postgresql.conf`:
+
+```conf
+oauth_validator_libraries = 'pg_oidc_validator'
 ```
-pg_ctl -D <datadir> restart
+
+Configure the expected resource audience for your PostgreSQL version before enabling OAuth logins. The module compares this value with the signed access token's `aud` claim, which may be a string or an array containing that value. The token must also have a valid expiration time.
+
+**PostgreSQL 19 and later** — Set `validator.audience` on each OAuth rule in `pg_hba.conf`. For example, these databases accept different resource audiences from the same issuer:
+
+```conf
+hostssl reports  analyst  192.0.2.0/24  oauth issuer="https://issuer.example" scope="connect" validator.audience="reports-api"
+hostssl billing  analyst  192.0.2.0/24  oauth issuer="https://issuer.example" scope="connect" validator.audience="billing-api"
+```
+
+Before upgrading from PostgreSQL 18, prepare an audience for every OAuth HBA rule in the PostgreSQL 19 configuration. A missing or invalid per-rule audience denies login. The PostgreSQL 18 server-wide setting does not provide a fallback.
+
+**PostgreSQL 18** — Set one `pg_oidc_validator.audience` in `postgresql.conf`. It applies to every OAuth rule on the server. For example:
+
+```conf
+pg_oidc_validator.audience = 'reports-api'
+```
+
+Use the corresponding HBA rule without the PostgreSQL 19 option:
+
+```conf
+hostssl reports  analyst  192.0.2.0/24  oauth issuer="https://issuer.example" scope="connect"
 ```
 
 ## Configuration variables
@@ -58,12 +73,12 @@ Setting this variable doesn't change the issuer used during JWT validation.
 
 ## Usage
 
-Use a connection string with OAuth to connect to the server.
+Use a TLS connection to the server with its certificate authority trusted by the client.
 
 Example with `psql`:
 
 ```
-psql 'host=127.0.0.1 dbname=name oauth_issuer=https://url.to.the.oidc.issuer oauth_client_id=client-id-registered-in-provider oauth_client_secret=optional-client-secret'
+psql 'host=db.example.com sslmode=verify-full dbname=name oauth_issuer=https://url.to.the.oidc.issuer oauth_client_id=client-id-registered-in-provider oauth_client_secret=optional-client-secret'
 ```
 
   > **__NOTE__:** `oauth_client_secret` is only necessary if the provider is configured to require one.
@@ -77,9 +92,9 @@ Remember to enable the OAuth 2 device flow for the client configured in Keycloak
 
 The below example is for a client with id "postgres" and an included scope called "database" being allowed to login with the PostgreSQL access role `rolename`.
 
-Example HBA entry:
+Example PostgreSQL 19 HBA entry:
 ```
-host	all	rolename	127.0.0.1/32	oauth	scope="database",issuer=https://127.0.0.1:8080/realms/master
+host	all	rolename	127.0.0.1/32	oauth	scope="database" issuer=https://127.0.0.1:8080/realms/master validator.audience=postgresql-resource
 ```
 
 Connection example:
@@ -89,8 +104,8 @@ psql 'host=127.0.0.1 dbname=name user=rolename oauth_issuer=https://127.0.0.1:80
 
 ### Microsoft / Entra ID
 * `oauth_issuer` for postgres should be `https://login.microsoftonline.com/<tenant_id>/v2.0`
-* It generates different JWTs for providers without custom scopes and with custom scopes.
-  The library can only validate JWTs with custom scopes; use the full scope name (api://<application id>/<scope name>) in the `scope` parameter in `pg_hba.conf`
+* For v2 access tokens, use the PostgreSQL resource application's client ID (GUID) as the audience for your PostgreSQL version. Expose a delegated permission on that application, and request its full name, such as `api://<resource-app-id>/connect`, in the OAuth HBA rule. The token must include the corresponding permission in `scp`.
+* Use `pg_oidc_validator.authn_field = 'oid'` and map the user's object ID from the configured tenant to a database role in `pg_ident.conf`. Use a `hostssl` rule for those roles and retain the existing HBA rules for service accounts. Leave `delegate_ident_mapping` disabled so PostgreSQL verifies the requested role.
 
 ## Google OIDC
 Google has some quirks which are currently not supported by the libpq device code implementation.

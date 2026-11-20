@@ -945,7 +945,17 @@
       "include.in.token.scope" : "true",
       "consent.screen.text" : "PgTest Scope",
       "display.on.consent.screen" : "true"
-    }
+    },
+    "protocolMappers" : [ {
+      "name" : "PostgreSQL resource",
+      "protocol" : "openid-connect",
+      "protocolMapper" : "oidc-audience-mapper",
+      "config" : {
+        "included.custom.audience" : "postgresql-test",
+        "access.token.claim" : "true",
+        "id.token.claim" : "false"
+      }
+    } ]
   }, {
     "id" : "55795111-021d-4597-95be-cf9c0a88893d",
     "name" : "microprofile-jwt",

@@ -1,9 +1,10 @@
 #include <jwt-cpp/jwt.h>
 
+#include <algorithm>
 #include <iterator>
-#include <ranges>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include "http_cache.hpp"
 #include "http_client.hpp"
@@ -28,8 +29,35 @@ void validator_shutdown(ValidatorModuleState*);
 bool validate_token(const ValidatorModuleState* state, const char* token, const char* role,
                     ValidatorModuleResult* result);
 
-static const OAuthValidatorCallbacks validator_callbacks = {PG_OAUTH_VALIDATOR_MAGIC, nullptr, validator_shutdown,
-                                                            validate_token};
+#if PG_VERSION_NUM >= 190000
+static constexpr const char* audience_setting = "validator.audience on the matching OAuth HBA line";
+
+static void validator_startup(ValidatorModuleState* state) {
+  const char* options[] = {"audience"};
+  RegisterOAuthHBAOptions(state, lengthof(options), options);
+}
+
+static const char* configured_audience(const ValidatorModuleState* state) {
+  // GetOAuthHBAOption returns the last occurrence. An access rule must name
+  // exactly one resource; reject ambiguous rules instead of choosing one.
+  int occurrences = 0;
+  ListCell* cell;
+  foreach (cell, MyProcPort->hba->oauth_opt_keys) {
+    if (strcmp(static_cast<const char*>(lfirst(cell)), "audience") == 0) ++occurrences;
+  }
+  if (occurrences > 1) throw std::runtime_error("Duplicate validator.audience on the matching OAuth HBA line");
+  return GetOAuthHBAOption(state, "audience");
+}
+#else
+static constexpr const char* audience_setting = "pg_oidc_validator.audience";
+static constexpr ValidatorStartupCB validator_startup = nullptr;
+static char* global_audience = nullptr;
+
+static const char* configured_audience(const ValidatorModuleState*) { return global_audience; }
+#endif
+
+static const OAuthValidatorCallbacks validator_callbacks = {PG_OAUTH_VALIDATOR_MAGIC, validator_startup,
+                                                            validator_shutdown, validate_token};
 
 extern "C" {
 const OAuthValidatorCallbacks* _PG_oauth_validator_module_init(void) { return &validator_callbacks; }
@@ -41,6 +69,11 @@ static char* authn_field = nullptr;
 static char* discovery_url_override = nullptr;
 
 extern "C" void _PG_init() {
+#if PG_VERSION_NUM < 190000
+  DefineCustomStringVariable("pg_oidc_validator.audience",
+                             gettext_noop("Expected audience of access tokens for this PostgreSQL server."), nullptr,
+                             &global_audience, "", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
+#endif
   DefineCustomStringVariable("pg_oidc_validator.authn_field",
                              gettext_noop("OAuth field used for matching PostgreSQL users"), nullptr, &authn_field,
                              "sub", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
@@ -56,6 +89,18 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   // initialize return values to deny
   res->authn_id = nullptr;
   res->authorized = false;
+
+  const char* audience = configured_audience(state);
+  if (audience == nullptr || *audience == '\0' ||
+      std::ranges::any_of(std::string_view(audience), [](unsigned char c) { return c <= 0x20 || c == 0x7f; })) {
+    elog(WARNING, "OAuth requires a nonempty audience without whitespace or control characters in %s",
+         audience_setting);
+    return false;
+  }
+  if (MyProcPort->hba->oauth_skip_usermap) {
+    elog(WARNING, "pg_oidc_validator requires PostgreSQL identity mapping");
+    return false;
+  }
 
   try {
     pg::pg_try([&]() { pg::http_cache::get_instance().attach(); });
@@ -95,76 +140,28 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   const auto jwks_info = http.get_json(jwks_uri);
   const auto decoded_token = jwt::decode(token);
   const std::string jwt_kid = decoded_token.get_header_claim("kid").as_string();
-  const auto verifier = configure_verifier_with_jwks(issuer, jwks_info, jwt_kid);
+  const auto verifier = configure_verifier_with_jwks(issuer, jwks_info, jwt_kid, audience);
   verifier.verify(decoded_token);
-  auto received_scopes = parse_jwt_scopes(decoded_token.get_payload_json()["scp"]);
-  const auto json_scope = parse_jwt_scopes(decoded_token.get_payload_json()["scope"]);
-  received_scopes.insert(json_scope.begin(), json_scope.end());
-
-  if (required_scopes.empty()) {
-    // An explicitly empty scope opts out of scope validation.
-    // While this isn't recommended, it gives a workaround for some OIDC providers.
-    elog(DEBUG1, "Configured scope is empty; skipping scope validation");
-  } else if (received_scopes.empty()) {
-    elog(WARNING, "Access token contains no scopes");
-  }
 
   const auto payload = decoded_token.get_payload_json();
-
-  PG_TRY();
-  {
-    if (!payload.contains(authn_field)) {
-      std::string claims_str;
-      for (const auto& kv : payload) {
-        if (!claims_str.empty()) claims_str += ", ";
-        claims_str += kv.first;
-      }
-      elog(WARNING, "OAuth failed: claim '%s' (authn_field) is missing. Available claims: %s", authn_field,
-           claims_str.c_str());
-      return false;
-    }
-    res->authn_id = pstrdup(payload.at(authn_field).to_str().c_str());
+  if (!token_scopes_match(issuer, required_scopes, payload)) {
+    elog(LOG, "OAuth access token does not grant the configured scopes");
+    return true;
   }
-  PG_CATCH();
-  {
-    elog(WARNING, "OAuth failed: out of memory");
+
+  const auto identity = payload.find(authn_field);
+  if (identity == payload.end() || !identity->second.is<std::string>()) {
+    elog(WARNING, "OAuth identity claim '%s' must be a string", authn_field);
     return false;
   }
-  PG_END_TRY();
-
-  if (required_scopes.empty()) {
-    res->authorized = true;
-  } else if (issuer_is_azure(issuer)) {
-    if (strcmp(authn_field, "sub") == 0) {
-      elog(WARNING,
-           "sub field is not guaranteed to be unique with Entra ID, consider using a different field for user "
-           "matching.");
-    }
-    // Azure is broken: it expects us to provide full tenant-id
-    // qualified scopes for the request, but then it returns the simple name
-    // in the JWT instead. This requires a custom matching code.
-    res->authorized = azure_scopes_match(required_scopes, received_scopes);
-  } else {
-    res->authorized = std::ranges::includes(received_scopes, required_scopes);
+  const auto& name = identity->second.get<std::string>();
+  if (name.empty() || name.find('\0') != std::string::npos) {
+    elog(WARNING, "OAuth identity claim '%s' must be a non-empty PostgreSQL identity", authn_field);
+    return false;
   }
 
-  if (!res->authorized) {
-    std::string req_str;
-    for (const auto& s : required_scopes) {
-      if (!req_str.empty()) req_str += ", ";
-      req_str += s;
-    }
-    std::string rec_str;
-    for (const auto& s : received_scopes) {
-      if (!rec_str.empty()) rec_str += ", ";
-      rec_str += s;
-    }
-    elog(LOG, "Authorization failed because of scope mismatch. Required scopes: %s. Received scopes: %s",
-         req_str.c_str(), rec_str.c_str());
-  } else {
-    elog(DEBUG1, "OIDC validator authorizing user as '%s'", res->authn_id);
-  }
-
+  res->authn_id = pg::pg_try([&]() { return pstrdup(name.c_str()); });
+  res->authorized = true;
   return true;
 } catch (const std::exception& ex) {
   elog(WARNING, "OAuth validation failed with exception: %s", ex.what());

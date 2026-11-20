@@ -1,36 +1,52 @@
 #include "jwk.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <iterator>
 #include <ranges>
 #include <regex>
 #include <sstream>
-
-extern "C" {
-#include "postgres.h"
-}
+#include <string_view>
 
 namespace {
 
-std::string extract_azure_tenant_id(const std::string& issuer) {
-  std::regex tenant_regex(R"([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})");
-  std::smatch match;
+constexpr std::string_view entra_v2_host = "https://login.microsoftonline.com/";
+constexpr std::string_view entra_v1_host = "https://sts.windows.net/";
 
-  if (std::regex_search(issuer, match, tenant_regex)) {
-    return match[0];
-  }
-
-  throw std::runtime_error("Couldn't extract tenant_id from azure issuer");
+bool issuer_is_azure(const std::string& issuer) {
+  return issuer.starts_with(entra_v2_host) || issuer.starts_with(entra_v1_host);
 }
 
-std::string convert_azure_issuer_to_jwt_format(const std::string& config_issuer) {
-  std::string tenant_id = extract_azure_tenant_id(config_issuer);
-
-  // Convert login.microsoftonline.com format to sts.windows.net format
-  if (config_issuer.find("login.microsoftonline.com") != std::string::npos) {
-    return "https://sts.windows.net/" + tenant_id + "/";
+std::string entra_tenant_id(const std::string& issuer) {
+  const bool v2 = issuer.starts_with(entra_v2_host);
+  const auto path = std::string_view(issuer).substr((v2 ? entra_v2_host : entra_v1_host).size());
+  const auto tenant = path.substr(0, path.find('/'));
+  const auto suffix = path.substr(tenant.size());
+  static const std::regex guid(R"([[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12})");
+  if (!std::regex_match(tenant.begin(), tenant.end(), guid) || suffix != (v2 ? "/v2.0" : "/")) {
+    throw std::runtime_error("Entra issuer must identify a single tenant by GUID");
   }
+  return std::string(tenant);
+}
 
-  return config_issuer;
+// The default jwt-cpp check makes exp optional. Require it and compare the
+// NumericDate in seconds, including fractional values permitted by RFC 7519.
+void require_expiration(const jwt::verify_ops::verify_context<jwt::traits::kazuho_picojson>& ctx, std::error_code& ec) {
+  const auto claim = ctx.get_claim(ec);
+  if (ec) return;
+  const auto type = claim.get_type();
+  if (type != jwt::json::type::integer && type != jwt::json::type::number) {
+    ec = jwt::error::token_verification_error::claim_type_missmatch;
+    return;
+  }
+  const double expiration =
+      type == jwt::json::type::integer ? static_cast<double>(claim.as_integer()) : claim.as_number();
+  const std::chrono::duration<double> now = ctx.current_time.time_since_epoch();
+  if (!(expiration > now.count())) ec = jwt::error::token_verification_error::token_expired;
+}
+
+bool oidc_scope(const std::string& scope) {
+  return scope == "openid" || scope == "profile" || scope == "email" || scope == "offline_access";
 }
 
 }  // namespace
@@ -122,10 +138,17 @@ std::string get_required_parameter(picojson::object const& key_object, std::stri
 }
 
 jwt_verifier configure_verifier_with_jwks(const std::string& issuer, const picojson::value& jwksInfo,
-                                          const std::string& required_kid) {
-  std::string expected_issuer = issuer;
+                                          const std::string& required_kid, const std::string& audience) {
+  if (audience.empty()) {
+    throw std::runtime_error("pg_oidc_validator.audience is required");
+  }
 
-  auto verifier = jwt::verify().with_issuer(expected_issuer);
+  auto verifier = jwt::verify().with_issuer(issuer).with_audience(audience).with_claim("exp", require_expiration);
+  if (issuer_is_azure(issuer)) {
+    const auto tenant = entra_tenant_id(issuer);
+    verifier.with_claim("tid", jwt::claim(tenant));
+    verifier.with_claim("ver", jwt::claim(std::string(issuer.starts_with(entra_v2_host) ? "2.0" : "1.0")));
+  }
 
   if (!jwksInfo.is<picojson::object>()) {
     throw std::runtime_error("JWKS info is not a JSON object");
@@ -152,6 +175,18 @@ jwt_verifier configure_verifier_with_jwks(const std::string& issuer, const picoj
     if (kid != required_kid) {
       // Skip keys that don't match the required key ID
       continue;
+    }
+
+    // Entra may publish tenant-specific keys alongside shared signing keys.
+    if (issuer_is_azure(issuer) && key_object.contains("issuer")) {
+      auto key_issuer = key_object.at("issuer").to_str();
+      const auto placeholder = key_issuer.find("{tenantid}");
+      if (placeholder != std::string::npos) {
+        key_issuer.replace(placeholder, sizeof("{tenantid}") - 1, entra_tenant_id(issuer));
+      }
+      if (key_issuer != issuer) {
+        continue;
+      }
     }
 
     const std::string kty = get_required_parameter(key_object, "kty");
@@ -183,15 +218,14 @@ std::string issuer_info_url(std::string const& issuer_url) {
   return issuer_url + info_end;
 }
 
-bool issuer_is_azure(const std::string& issuer) {
-  return issuer.contains("login.microsoftonline.com") || issuer.contains("sts.windows.net");
-}
-
 scopes_t parse_jwt_scopes(const picojson::value& jsonScopes) {
   if (jsonScopes.is<picojson::array>()) {
-    const auto scope_range =
-        jsonScopes.get<picojson::array>() | std::ranges::views::transform(&picojson::value::to_str);
-    return {scope_range.begin(), scope_range.end()};
+    scopes_t scopes;
+    for (const auto& scope : jsonScopes.get<picojson::array>()) {
+      if (!scope.is<std::string>()) return {};
+      scopes.insert(scope.get<std::string>());
+    }
+    return scopes;
   }
   if (jsonScopes.is<std::string>()) {
     std::istringstream iss(jsonScopes.get<std::string>());
@@ -202,26 +236,33 @@ scopes_t parse_jwt_scopes(const picojson::value& jsonScopes) {
 }
 
 bool azure_scopes_match(const scopes_t& required_scopes, const scopes_t& received_scopes) {
-  for (const auto& required_scope : required_scopes) {  // NOLINT: readability-use-anyofallof
-    if (required_scope == "openid") {
-      // Azure never returns openid in the output :(
-      continue;
-    }
-
-    if (received_scopes.contains(required_scope)) {
-      continue;
-    }
-
-    // For Azure, check if required scope ends with "/<scope-name>"
-    // and received scope matches the part after the last "/"
-    auto last_slash = required_scope.find_last_of('/');
-    if (last_slash != std::string::npos && last_slash < required_scope.length() - 1) {
-      std::string scope_suffix = required_scope.substr(last_slash + 1);
-      if (!received_scopes.contains(scope_suffix)) {
-        return false;
-      }
-    }
+  bool has_resource_scope = false;
+  for (const auto& scope : required_scopes) {
+    if (oidc_scope(scope)) continue;
+    // Entra returns delegated permissions as short names, even when the client
+    // requested a resource-qualified scope.
+    const auto slash = scope.rfind('/');
+    const auto name = slash == std::string::npos ? scope : scope.substr(slash + 1);
+    if (name.empty() || !received_scopes.contains(name)) return false;
+    has_resource_scope = true;
   }
+  return has_resource_scope;
+}
 
-  return true;
+bool token_scopes_match(const std::string& issuer, const scopes_t& required_scopes, const picojson::object& payload) {
+  const auto scp = payload.find("scp");
+  if (issuer_is_azure(issuer)) {
+    // Only delegated access tokens carry the Entra scp string. An ID token
+    // or an application-only token must not authorize a database user.
+    return scp != payload.end() && scp->second.is<std::string>() &&
+           azure_scopes_match(required_scopes, parse_jwt_scopes(scp->second));
+  }
+  if (required_scopes.empty()) return true;
+  scopes_t received;
+  if (scp != payload.end()) received = parse_jwt_scopes(scp->second);
+  if (const auto scope = payload.find("scope"); scope != payload.end()) {
+    const auto values = parse_jwt_scopes(scope->second);
+    received.insert(values.begin(), values.end());
+  }
+  return std::ranges::includes(received, required_scopes);
 }

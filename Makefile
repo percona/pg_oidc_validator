@@ -8,6 +8,8 @@ OBJS = \
 
 PG_CPPFLAGS = -Ijwt-cpp/include -std=c++23
 
+EXTRA_CLEAN += claim_policy_test verified_claims_test
+
 USE_PGXS ?= 0
 
 ifeq ($(USE_PGXS), 1)
@@ -36,3 +38,14 @@ oauth_conn_test: src/oauth_conn_test.o
 
 src/oauth_conn_test.o: src/oauth_conn_test.cpp
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -I$(includedir) -std=c++23 -c -o $@ $<
+
+.PHONY: check-claims
+check-claims: claim_policy_test verified_claims_test
+	./claim_policy_test
+	./verified_claims_test
+
+claim_policy_test: test/claim_policy.cpp src/jwk.o
+verified_claims_test: test/verified_claims.cpp src/jwk.o
+
+claim_policy_test verified_claims_test:
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(PG_CPPFLAGS) -Isrc -o $@ $^ -lcrypto -lssl
