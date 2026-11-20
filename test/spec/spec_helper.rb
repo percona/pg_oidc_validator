@@ -49,7 +49,9 @@ module TestHelpers
     run_command("#{pgbin}createdb -p #{PGPORT} -h 127.0.0.1 postgres", allow_failure: true)
     run_command("#{pgbin}psql -p #{PGPORT} -h 127.0.0.1 -d postgres -c 'CREATE ROLE testuser LOGIN SUPERUSER;'", allow_failure: true)
 
-    FileUtils.cp(File.join(SCRIPT_DIR, 'pg_hba.conf'), "#{PGDATA}/pg_hba.conf")
+    pg_major = File.read(File.join(PGDATA, 'PG_VERSION')).to_i
+    hba_file = pg_major >= 19 ? 'pg_hba-19.conf' : 'pg_hba.conf'
+    FileUtils.cp(File.join(SCRIPT_DIR, hba_file), "#{PGDATA}/pg_hba.conf")
     FileUtils.cp(File.join(SCRIPT_DIR, 'pg_ident.conf'), "#{PGDATA}/pg_ident.conf")
     run_command("#{pgbin}pg_ctl -D #{PGDATA} reload")
     sleep 1
