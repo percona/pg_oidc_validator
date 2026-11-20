@@ -11,10 +11,11 @@ concurrency:
 
 jobs:
   pgxs-build:
-    name: Build and test (${{ matrix.runner }})
+    name: PostgreSQL ${{ matrix.pg }} on ${{ matrix.runner }}
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        pg: [18, 19]
     runs-on: ${{ matrix.runner }}
     env:
       CC: clang-21
@@ -28,7 +29,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           build-essential \
-          pkg-config \
+          pkg-config python3-cryptography \
           libjwt-dev \
           libcurl4-openssl-dev \
           libssl-dev \
@@ -48,7 +49,7 @@ jobs:
       uses: actions/checkout@v7
       with:
         repository: postgres/postgres
-        ref: REL_18_STABLE
+        ref: REL_${{ matrix.pg }}_STABLE
         path: pg-source
 
     - name: Configure and build PostgreSQL
@@ -56,6 +57,7 @@ jobs:
         cd pg-source
         ./configure \
           --prefix=/usr/local/pgsql \
+          --with-ssl=openssl --with-libcurl \
           --enable-debug \
           --enable-cassert
         make -j$(nproc)
@@ -80,4 +82,11 @@ jobs:
         export USE_PGXS=1
         export PG_CONFIG=/usr/local/pgsql/bin/pg_config
         make -j
-        make check-claims
+        make check-claims oauth_conn_test
+        sudo make USE_PGXS=1 PG_CONFIG=/usr/local/pgsql/bin/pg_config install
+
+    - name: Verify database audience rules
+      env:
+        PGBIN: /usr/local/pgsql/bin
+        LD_LIBRARY_PATH: /usr/local/pgsql/lib
+      run: /usr/bin/python3 test/hba_audience.py
