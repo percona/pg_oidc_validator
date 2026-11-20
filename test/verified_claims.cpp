@@ -51,7 +51,7 @@ int main() try {
                      {"ver", value("2.0"s)},
                      {"exp", value(int64_t(epoch + 300))}};
 
-  auto check = [&](const char* name, object claims, bool expect_success) {
+  auto check = [&](const char* name, const object& claims, bool expect_success) {
     auto fixture = jwt::create().set_key_id("fixture");
     for (const auto& [claim, val] : claims) fixture.set_payload_claim(claim, val);
     const auto decoded = jwt::decode(fixture.sign(signer));

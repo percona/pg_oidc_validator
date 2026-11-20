@@ -57,7 +57,7 @@ std::optional<int> http_client::parse_cache_control(std::string_view header) {
     const std::string& matched_digits = match[1].str();
     int value = 0;
     const char* begin = matched_digits.data();
-    const char* end = &matched_digits[matched_digits.size()];
+    const char* end = begin + matched_digits.size();
     auto [ptr, ec] = std::from_chars(begin, end, value);
 
     if (ec == std::errc()) {
