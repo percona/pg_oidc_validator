@@ -1,8 +1,10 @@
 #include <jwt-cpp/jwt.h>
 
+#include <algorithm>
 #include <iterator>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include "http_cache.hpp"
 #include "http_client.hpp"
@@ -27,23 +29,51 @@ void validator_shutdown(ValidatorModuleState*);
 bool validate_token(const ValidatorModuleState* state, const char* token, const char* role,
                     ValidatorModuleResult* result);
 
-static const OAuthValidatorCallbacks validator_callbacks = {PG_OAUTH_VALIDATOR_MAGIC, nullptr, validator_shutdown,
-                                                            validate_token};
+#if PG_VERSION_NUM >= 190000
+static constexpr const char* audience_setting = "validator.audience on the matching OAuth HBA line";
+
+static void validator_startup(ValidatorModuleState* state) {
+  const char* options[] = {"audience"};
+  RegisterOAuthHBAOptions(state, lengthof(options), options);
+}
+
+static const char* configured_audience(const ValidatorModuleState* state) {
+  // GetOAuthHBAOption returns the last occurrence. An access rule must name
+  // exactly one resource; reject ambiguous rules instead of choosing one.
+  int occurrences = 0;
+  ListCell* cell;
+  foreach (cell, MyProcPort->hba->oauth_opt_keys) {
+    if (strcmp(static_cast<const char*>(lfirst(cell)), "audience") == 0) ++occurrences;
+  }
+  if (occurrences > 1) throw std::runtime_error("Duplicate validator.audience on the matching OAuth HBA line");
+  return GetOAuthHBAOption(state, "audience");
+}
+#else
+static constexpr const char* audience_setting = "pg_oidc_validator.audience";
+static constexpr ValidatorStartupCB validator_startup = nullptr;
+static char* global_audience = nullptr;
+
+static const char* configured_audience(const ValidatorModuleState*) { return global_audience; }
+#endif
+
+static const OAuthValidatorCallbacks validator_callbacks = {PG_OAUTH_VALIDATOR_MAGIC, validator_startup,
+                                                            validator_shutdown, validate_token};
 
 extern "C" {
 const OAuthValidatorCallbacks* _PG_oauth_validator_module_init(void) { return &validator_callbacks; }
 }
 
 static char* authn_field = nullptr;
-static char* audience = nullptr;
 
 // When non-empty, the validator uses this URL (instead of pg_hba's `issuer=`)
 static char* discovery_url_override = nullptr;
 
 extern "C" void _PG_init() {
+#if PG_VERSION_NUM < 190000
   DefineCustomStringVariable("pg_oidc_validator.audience",
                              gettext_noop("Expected audience of access tokens for this PostgreSQL server."), nullptr,
-                             &audience, "", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
+                             &global_audience, "", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
+#endif
   DefineCustomStringVariable("pg_oidc_validator.authn_field",
                              gettext_noop("OAuth field used for matching PostgreSQL users"), nullptr, &authn_field,
                              "sub", PGC_SIGHUP, 0, nullptr, nullptr, nullptr);
@@ -60,8 +90,11 @@ bool validate_token(const ValidatorModuleState* state, const char* token, const 
   res->authn_id = nullptr;
   res->authorized = false;
 
-  if (audience == nullptr || *audience == '\0') {
-    elog(WARNING, "OAuth requires pg_oidc_validator.audience to be configured");
+  const char* audience = configured_audience(state);
+  if (audience == nullptr || *audience == '\0' ||
+      std::ranges::any_of(std::string_view(audience), [](unsigned char c) { return c <= 0x20 || c == 0x7f; })) {
+    elog(WARNING, "OAuth requires a nonempty audience without whitespace or control characters in %s",
+         audience_setting);
     return false;
   }
   if (MyProcPort->hba->oauth_skip_usermap) {
