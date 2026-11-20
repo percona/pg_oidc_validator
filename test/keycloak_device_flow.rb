@@ -63,14 +63,10 @@ begin
 
   # Enter device code
   device_code_input = wait.until do
-    element = driver.find_element(id: 'device-user-code')
+    element = driver.find_element(name: 'device_user_code')
     element if element.displayed?
   end
-  device_code_input.send_keys(options[:device_code])
-
-  # Submit device code
-  submit_button = driver.find_element(css: 'input[type="submit"]')
-  submit_button.click
+  device_code_input.send_keys(options[:device_code], :enter)
 
   # Wait for login page and enter username
   username_input = wait.until do
