@@ -13,6 +13,7 @@ jobs:
   build-rpm:
     name: Build RPM (${{ matrix.distro_name }})
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -45,6 +46,7 @@ jobs:
   publish-rpm:
     name: Publish RPM Release
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     needs: [build-rpm]
     if: "github.repository == 'Percona-Lab/pg_oidc_validator' && github.ref_name == 'main' && github.event_name == 'push'"
 
